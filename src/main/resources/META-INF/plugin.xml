@@ -1,0 +1,32 @@
+<idea-plugin>
+    <id>com.github.fangzc.ai-commit-message</id>
+    <name>AI Commit Message</name>
+    <vendor>fangzc</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.vcs</depends>
+    <depends>Git4Idea</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Settings 页面 -->
+        <projectConfigurable
+                parentId="tools"
+                instance="com.github.fangzc.aicommit.settings.PluginSettingsConfigurable"
+                id="com.github.fangzc.aicommit.settings"
+                displayName="AI Commit Message"/>
+
+        <!-- 通知组 -->
+        <notificationGroup id="AiCommit.Notification"
+                           displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <action id="AiCommit.Generate"
+                class="com.github.fangzc.aicommit.action.GenerateCommitMessageAction"
+                text="Generate AI Commit Message"
+                description="Generate commit message using AI based on selected changes"
+                icon="AllIcons.Actions.Lightning">
+            <add-to-group group-id="Vcs.MessageActionGroup" anchor="first"/>
+        </action>
+    </actions>
+</idea-plugin>
