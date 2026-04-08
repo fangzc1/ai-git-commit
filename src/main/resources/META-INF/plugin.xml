@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>com.github.fangzc.ai-commit-message</id>
-    <name>AI Commit Message</name>
+    <name>Commit Message(AI)</name>
     <vendor>fangzc</vendor>
 
     <depends>com.intellij.modules.platform</depends>
@@ -13,7 +13,7 @@
                 parentId="tools"
                 instance="com.github.fangzc.aicommit.settings.PluginSettingsConfigurable"
                 id="com.github.fangzc.aicommit.settings"
-                displayName="AI Commit Message"/>
+                displayName="Commit Message(AI)"/>
 
         <!-- 通知组 -->
         <notificationGroup id="AiCommit.Notification"
