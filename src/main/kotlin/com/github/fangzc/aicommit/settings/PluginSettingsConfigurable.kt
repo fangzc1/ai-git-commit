@@ -283,11 +283,17 @@ class PluginSettingsConfigurable : Configurable {
                     for (name in DefaultPrompts.TEMPLATES.keys) {
                         val description = when (name) {
                             "Conventional Commits" -> l(
-                                "(Default) <type>(<scope>): <subject> format",
-                                "(默认) 生成 <type>(<scope>): <subject> 格式"
+                                "(Default) <type>(<scope>): <subject> + body",
+                                "(默认) <type>(<scope>): <subject> + body 改动说明"
                             )
-                            "Simple" -> l("One-line short summary", "一行简短描述")
-                            "Detailed" -> l("Title line + detailed description", "标题行 + 详细说明")
+                            "Simple" -> l(
+                                "Single-line <type>(<scope>): <subject> only",
+                                "仅生成一行 <type>(<scope>): <subject>"
+                            )
+                            "Detailed" -> l(
+                                "<type>: <subject> + body + footer (with Breaking Change & Issue refs)",
+                                "<type>: <subject> + body + footer（含 Breaking Change 和 Issue 关联）"
+                            )
                             else -> ""
                         }
                         row {
