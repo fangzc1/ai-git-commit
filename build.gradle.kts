@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.fangzc"
-version = "1.0.4"
+version = "1.0.5"
 
 kotlin {
     jvmToolchain(21)
@@ -35,13 +35,26 @@ intellijPlatform {
         name = "AI Commit Helper"
         version = project.version.toString()
         description = """
-            <p>Generate git commit messages using AI (OpenAI, Anthropic, Gemini or custom OpenAI-compatible endpoints).</p>
+            <h3>AI Commit Helper</h3>
+            <p>Automatically generate Git commit messages using AI. Supports OpenAI, Anthropic, Gemini and custom providers with SSE streaming output.</p>
             <ul>
-                <li>One-click AI commit message generation based on selected changes</li>
-                <li>Streaming output for real-time feedback</li>
-                <li>Built-in prompt templates (Conventional Commits, Simple, Detailed)</li>
-                <li>Custom prompt support</li>
-                <li>Proxy configuration</li>
+                <li>One-click generate commit message from selected changes</li>
+                <li>Multiple AI providers: OpenAI, Anthropic, Gemini, Custom</li>
+                <li>Streaming output for real-time generation</li>
+                <li>Customizable prompt templates (Conventional Commits / Simple / Detailed / Custom)</li>
+                <li>Proxy support (IDE / Custom / None)</li>
+                <li>Configurable commit message language</li>
+            </ul>
+            <hr/>
+            <h3>AI Commit Helper（中文说明）</h3>
+            <p>使用 AI 自动生成 Git Commit Message。支持 OpenAI、Anthropic、Gemini 及自定义 Provider，采用 SSE 流式输出。</p>
+            <ul>
+                <li>一键基于已选中的代码变更生成 Commit Message</li>
+                <li>多 AI Provider 支持：OpenAI、Anthropic、Gemini、自定义</li>
+                <li>流式输出，实时查看生成过程</li>
+                <li>可自定义 Prompt 模板（Conventional Commits / Simple / Detailed / Custom）</li>
+                <li>代理支持（IDE 代理 / 自定义代理 / 无代理）</li>
+                <li>可配置 Commit Message 输出语言</li>
             </ul>
         """.trimIndent()
         vendor {
