@@ -64,10 +64,11 @@ class PluginSettingsConfigurable : Configurable {
     private var locale = settings.stateData.locale
     private var currentUiLocale = settings.stateData.uiLocale
 
-    // 模型搜索状态：全量列表、防递归标志、防选中后重触发标志
+    // 模型搜索状态：全量列表、防递归标志、防选中后重触发标志、后台自动获取标志
     private var allModels: List<String> = emptyList()
     private var isFiltering = false
     private var justSelected = false
+    private var isAutoFetching = false
 
     // 各 Provider 的 API 地址和模型缓存，切换 Provider 时保存/恢复用户已填写的值
     private val providerApiUrlCache: MutableMap<AiProvider, String> =
@@ -668,6 +669,47 @@ class PluginSettingsConfigurable : Configurable {
         }
     }
 
+    /**
+     * 后台自动获取模型列表，完成后展开模型下拉框。
+     * 供用户首次点击下拉框（无缓存）时自动触发，替代手动点击"测试连接"。
+     */
+    private fun autoFetchModelsAndShowPopup(apiKey: String, apiUrl: String) {
+        if (isAutoFetching) return
+        isAutoFetching = true
+        // 在 EDT 上提前捕获 Swing 组件的值，避免在 IO 线程中访问 UI
+        val currentModel = modelCombo.component.selectedItem as? String ?: selectedModel
+
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            var fetchedModels: List<String> = emptyList()
+            try {
+                val client = AiClientFactory.create(
+                    provider = selectedProvider,
+                    apiKey = apiKey,
+                    apiBaseUrl = apiUrl,
+                    model = currentModel
+                )
+                fetchedModels = client.fetchModels()
+            } catch (_: Exception) {
+                // 静默失败，保持现有列表，不弹错误
+            }
+
+            val fetchedModelsFinal = fetchedModels
+            SwingUtilities.invokeLater {
+                isAutoFetching = false
+                if (fetchedModelsFinal.isNotEmpty()) {
+                    // 缓存本次结果，供后续切换 Provider 时恢复
+                    providerTestResultCache[selectedProvider] =
+                        ProviderTestCache(apiUrl, apiKey, fetchedModelsFinal)
+                    val latestModel = modelCombo.component.selectedItem as? String ?: currentModel
+                    populateModelCombo(fetchedModelsFinal, latestModel)
+                    updateConnectionStatus(ConnectionStatus.SUCCESS, null, fetchedModelsFinal.size)
+                }
+                // 无论成功与否，获取完成后自动展开下拉框
+                modelCombo.component.showPopup()
+            }
+        }
+    }
+
     private fun populateModelCombo(models: List<String>, currentModel: String) {
         val combo = modelCombo.component
         allModels = models
@@ -841,7 +883,26 @@ class PluginSettingsConfigurable : Configurable {
 
         // popup 关闭时恢复全量列表，保证下次展开时显示所有模型
         addPopupMenuListener(object : PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent) {}
+            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent) {
+                if (isAutoFetching) {
+                    // 正在后台获取中，阻止展开，等待获取完成后自动展开
+                    SwingUtilities.invokeLater { hidePopup() }
+                    return
+                }
+                val currentKey = String(apiKeyField.component.password)
+                val currentUrl = apiUrlField.component.text
+                // 检查是否有与当前 URL + Key 匹配的模型缓存
+                val testCache = providerTestResultCache[selectedProvider]
+                val hasCachedModels = testCache != null
+                        && testCache.apiUrl == currentUrl
+                        && testCache.apiKey == currentKey
+                if (!hasCachedModels && currentKey.isNotBlank()) {
+                    // 无缓存：阻止本次展开，后台自动获取，完成后再展开
+                    SwingUtilities.invokeLater { hidePopup() }
+                    autoFetchModelsAndShowPopup(currentKey, currentUrl)
+                }
+                // 有缓存或无 Key：默认正常展开，无需干预
+            }
             override fun popupMenuCanceled(e: PopupMenuEvent) {}
             override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent) {
                 if (isFiltering) return
