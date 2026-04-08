@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- 主分支竖线（深色主题用更亮的橙色） -->
+  <line x1="5" y1="2.5" x2="5" y2="13.5" stroke="#FB923C" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- feature 分支曲线 -->
+  <path d="M5 8 C5 5 12 5 12 3.5" stroke="#FDBA74" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+
+  <!-- 主分支提交点 -->
+  <circle cx="5" cy="2.5" r="1.5" fill="#FB923C"/>
+  <circle cx="5" cy="8"   r="1.5" fill="#FB923C"/>
+  <circle cx="5" cy="13.5" r="1.5" fill="#FB923C"/>
+
+  <!-- feature 分支末端提交点 -->
+  <circle cx="12" cy="3.5" r="1.5" fill="#FDBA74"/>
+
+  <!-- AI 四芒星（浅黄，深色背景上更清晰） -->
+  <path d="M13 7.7 L13.9 8.7 L14.8 9.5 L13.9 10.3 L13 11.3 L12.1 10.3 L11.2 9.5 L12.1 8.7 Z" fill="#FDE68A"/>
+</svg>

@@ -61,6 +61,12 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
     private var locale = settings.stateData.locale
     private var currentUiLocale = settings.stateData.uiLocale
 
+    // 各 Provider 的 API 地址和模型缓存，切换 Provider 时保存/恢复用户已填写的值
+    private val providerApiUrlCache: MutableMap<AiProvider, String> =
+        mutableMapOf(settings.stateData.provider to settings.stateData.apiBaseUrl)
+    private val providerModelCache: MutableMap<AiProvider, String> =
+        mutableMapOf(settings.stateData.provider to settings.stateData.model)
+
     // 外层包装面板，语言切换时重建内层设置面板
     private var wrapper: JPanel? = null
 
@@ -150,13 +156,23 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                             selectedItem = selectedProvider.displayName
                             addActionListener {
                                 val newProvider = AiProvider.fromDisplayName(selectedItem as String)
+                                if (newProvider == selectedProvider) return@addActionListener
+
+                                // 将当前 Provider 的 URL 和模型保存到缓存
+                                providerApiUrlCache[selectedProvider] = apiUrlField.component.text
+                                providerModelCache[selectedProvider] =
+                                    modelCombo.component.selectedItem as? String ?: ""
+
                                 selectedProvider = newProvider
-                                if (newProvider != AiProvider.CUSTOM) {
-                                    apiUrlField.component.text = newProvider.defaultApiUrl
-                                    apiUrl = newProvider.defaultApiUrl
-                                }
+
+                                // 优先从缓存恢复，缓存没有则使用 Provider 默认值
+                                val restoredUrl = providerApiUrlCache[newProvider] ?: newProvider.defaultApiUrl
+                                apiUrlField.component.text = restoredUrl
+                                apiUrl = restoredUrl
+
+                                val restoredModel = providerModelCache[newProvider]
                                 updateConnectionStatus(ConnectionStatus.IDLE)
-                                updateModelList(newProvider)
+                                updateModelList(newProvider, restoredModel)
                                 updateProviderHint()
                                 updateOverviewSummary()
                             }
@@ -490,16 +506,25 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
         connectionStatus = ConnectionStatus.IDLE
         lastConnectionError = null
         lastFetchedModelCount = null
+        // 重置 per-provider 缓存，仅保留已保存的 Provider 数据
+        providerApiUrlCache.clear()
+        providerApiUrlCache[settings.stateData.provider] = settings.stateData.apiBaseUrl
+        providerModelCache.clear()
+        providerModelCache[settings.stateData.provider] = settings.stateData.model
         // 重建面板以将重置的值同步回所有 UI 组件
         if (wrapper != null) rebuildPanel()
     }
 
-    private fun updateModelList(provider: AiProvider) {
+    private fun updateModelList(provider: AiProvider, preferredModel: String? = null) {
         val combo = modelCombo.component
         combo.removeAllItems()
         val models = provider.defaultModels.ifEmpty { listOf("") }
         models.forEach { combo.addItem(it) }
-        if (models.isNotEmpty()) {
+        // 优先使用缓存/传入的首选模型，否则使用模型列表第一个
+        val targetModel = preferredModel?.takeIf { it.isNotBlank() }
+        if (targetModel != null) {
+            combo.selectedItem = targetModel
+        } else if (models.isNotEmpty()) {
             combo.selectedItem = models.first()
         }
         selectedModel = combo.selectedItem as? String ?: selectedModel

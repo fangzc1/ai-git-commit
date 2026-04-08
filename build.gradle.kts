@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.fangzc"
-version = "1.0.1"
+version = "1.0.2"
 
 kotlin {
     jvmToolchain(21)

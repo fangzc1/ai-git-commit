@@ -11,7 +11,7 @@ import com.intellij.openapi.project.Project
 /**
  * 插件配置持久化服务（项目级别）
  */
-@Service(Service.Level.PROJECT)
+@Service(Service.Level.APP)
 @State(
     name = "AiCommitSettings",
     storages = [Storage("aiCommitSettings.xml")]
