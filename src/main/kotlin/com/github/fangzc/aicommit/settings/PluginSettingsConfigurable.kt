@@ -18,6 +18,10 @@ import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
+import javax.swing.event.PopupMenuEvent
+import javax.swing.event.PopupMenuListener
 
 /**
  * Settings 页面：Settings > Tools > AI Commit Message（应用级，所有项目共享）
@@ -59,6 +63,11 @@ class PluginSettingsConfigurable : Configurable {
     private var maxTokens = settings.stateData.maxTokens
     private var locale = settings.stateData.locale
     private var currentUiLocale = settings.stateData.uiLocale
+
+    // 模型搜索状态：全量列表、防递归标志、防选中后重触发标志
+    private var allModels: List<String> = emptyList()
+    private var isFiltering = false
+    private var justSelected = false
 
     // 各 Provider 的 API 地址和模型缓存，切换 Provider 时保存/恢复用户已填写的值
     private val providerApiUrlCache: MutableMap<AiProvider, String> =
@@ -212,11 +221,16 @@ class PluginSettingsConfigurable : Configurable {
                     val models = selectedProvider.defaultModels.ifEmpty {
                         listOf(selectedModel.ifBlank { "gpt-4o-mini" })
                     }
+                    allModels = models
                     modelCombo = comboBox(models)
                         .applyToComponent {
                             isEditable = true
                             selectedItem = selectedModel
-                            addActionListener { updateOverviewSummary() }
+                            addActionListener {
+                                if (!isFiltering) justSelected = true
+                                updateOverviewSummary()
+                            }
+                            attachModelSearchFilter()
                         }
                     label(l("You can keep the recommended model or enter one manually.", "可以使用推荐模型，也可以手动输入自定义模型。"))
                         .applyToComponent {
@@ -516,15 +530,21 @@ class PluginSettingsConfigurable : Configurable {
 
     private fun updateModelList(provider: AiProvider, preferredModel: String? = null) {
         val combo = modelCombo.component
-        combo.removeAllItems()
         val models = provider.defaultModels.ifEmpty { listOf("") }
-        models.forEach { combo.addItem(it) }
-        // 优先使用缓存/传入的首选模型，否则使用模型列表第一个
-        val targetModel = preferredModel?.takeIf { it.isNotBlank() }
-        if (targetModel != null) {
-            combo.selectedItem = targetModel
-        } else if (models.isNotEmpty()) {
-            combo.selectedItem = models.first()
+        allModels = models
+        isFiltering = true
+        try {
+            combo.removeAllItems()
+            models.forEach { combo.addItem(it) }
+            // 优先使用缓存/传入的首选模型，否则使用模型列表第一个
+            val targetModel = preferredModel?.takeIf { it.isNotBlank() }
+            if (targetModel != null) {
+                combo.selectedItem = targetModel
+            } else if (models.isNotEmpty()) {
+                combo.selectedItem = models.first()
+            }
+        } finally {
+            isFiltering = false
         }
         selectedModel = combo.selectedItem as? String ?: selectedModel
         syncComboWidths()
@@ -607,13 +627,19 @@ class PluginSettingsConfigurable : Configurable {
 
     private fun populateModelCombo(models: List<String>, currentModel: String) {
         val combo = modelCombo.component
-        combo.removeAllItems()
-        models.forEach { combo.addItem(it) }
-        // 优先保留当前已输入的模型，否则选第一个
-        if (currentModel.isNotBlank() && models.contains(currentModel)) {
-            combo.selectedItem = currentModel
-        } else if (models.isNotEmpty()) {
-            combo.selectedIndex = 0
+        allModels = models
+        isFiltering = true
+        try {
+            combo.removeAllItems()
+            models.forEach { combo.addItem(it) }
+            // 优先保留当前已输入的模型，否则选第一个
+            if (currentModel.isNotBlank() && models.contains(currentModel)) {
+                combo.selectedItem = currentModel
+            } else if (models.isNotEmpty()) {
+                combo.selectedIndex = 0
+            }
+        } finally {
+            isFiltering = false
         }
         selectedModel = combo.selectedItem as? String ?: currentModel
         updateOverviewSummary()
@@ -724,6 +750,70 @@ class PluginSettingsConfigurable : Configurable {
         PluginSettings.ProxyMode.IDE -> l("IDE Proxy", "IDE 代理")
         PluginSettings.ProxyMode.CUSTOM -> l("Custom Proxy", "自定义代理")
         PluginSettings.ProxyMode.NONE -> l("No Proxy", "不使用代理")
+    }
+
+    /**
+     * 为模型 ComboBox 附加 filter-as-you-type 搜索能力。
+     * 仅在 popup **已展开**时执行过滤，popup 关闭时不干扰用户自由输入（支持自定义模型）。
+     * popup 关闭时自动恢复全量列表，保证下次展开能看到所有模型。
+     */
+    private fun com.intellij.openapi.ui.ComboBox<String>.attachModelSearchFilter() {
+        val textComponent = (editor?.editorComponent as? javax.swing.text.JTextComponent) ?: return
+        var pendingUpdate = false
+
+        // 仅在 popup 已展开时执行过滤，不干扰关闭状态下的自由输入
+        textComponent.document.addDocumentListener(object : DocumentListener {
+            override fun insertUpdate(e: DocumentEvent) = scheduleFilter()
+            override fun removeUpdate(e: DocumentEvent) = scheduleFilter()
+            override fun changedUpdate(e: DocumentEvent) {}
+
+            private fun scheduleFilter() {
+                if (isFiltering || pendingUpdate || !isPopupVisible) return
+                pendingUpdate = true
+                SwingUtilities.invokeLater {
+                    pendingUpdate = false
+                    if (isFiltering || justSelected || !isPopupVisible) {
+                        justSelected = false
+                        return@invokeLater
+                    }
+                    val keyword = textComponent.text
+                    val filtered = if (keyword.isBlank()) allModels
+                    else allModels.filter { it.contains(keyword, ignoreCase = true) }
+
+                    // 更新下拉列表项（isFiltering 阻断 removeAllItems/addItem 触发的递归事件）
+                    isFiltering = true
+                    try {
+                        removeAllItems()
+                        filtered.forEach { addItem(it) }
+                        textComponent.text = keyword
+                        textComponent.caretPosition = keyword.length
+                    } finally {
+                        isFiltering = false
+                    }
+
+                    if (filtered.isEmpty()) hidePopup()
+                }
+            }
+        })
+
+        // popup 关闭时恢复全量列表，保证下次展开时显示所有模型
+        addPopupMenuListener(object : PopupMenuListener {
+            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent) {}
+            override fun popupMenuCanceled(e: PopupMenuEvent) {}
+            override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent) {
+                if (isFiltering) return
+                val currentText = textComponent.text
+                isFiltering = true
+                try {
+                    removeAllItems()
+                    allModels.forEach { addItem(it) }
+                    textComponent.text = currentText
+                    textComponent.caretPosition = currentText.length
+                } finally {
+                    isFiltering = false
+                }
+            }
+        })
     }
 
     private fun syncComboWidths() {
