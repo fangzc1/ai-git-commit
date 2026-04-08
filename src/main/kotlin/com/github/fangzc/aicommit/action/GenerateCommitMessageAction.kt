@@ -69,7 +69,7 @@ class GenerateCommitMessageAction : AnAction() {
         }
 
         // 检查 API Key 是否已配置
-        val settings = PluginSettings.getInstance(project)
+        val settings = PluginSettings.getInstance()
         if (settings.apiKey.isBlank()) {
             showNotification(
                 project,
@@ -106,7 +106,7 @@ class GenerateCommitMessageAction : AnAction() {
                     val prompt = PromptBuilder.build(diff, project)
 
                     // 3. 调用 AI 流式生成
-                    val client = AiClientFactory.createFromSettings(project)
+                    val client = AiClientFactory.createFromSettings()
 
                     // 清空当前 commit message
                     withContext(Dispatchers.Main) {

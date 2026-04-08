@@ -6,7 +6,6 @@ import com.github.fangzc.aicommit.ai.impl.GeminiClient
 import com.github.fangzc.aicommit.ai.impl.OpenAiClient
 import com.github.fangzc.aicommit.settings.PluginSettings
 import com.github.fangzc.aicommit.util.ProxyConfigUtil
-import com.intellij.openapi.project.Project
 
 /**
  * AI 客户端工厂：根据配置创建对应的 AiClient 实例
@@ -14,17 +13,16 @@ import com.intellij.openapi.project.Project
 object AiClientFactory {
 
     /**
-     * 根据项目配置创建 AiClient
+     * 根据全局配置创建 AiClient
      */
-    fun createFromSettings(project: Project): AiClient {
-        val settings = PluginSettings.getInstance(project)
+    fun createFromSettings(): AiClient {
+        val settings = PluginSettings.getInstance()
         val state = settings.stateData
         return create(
             provider = state.provider,
             apiKey = settings.apiKey,
             apiBaseUrl = state.apiBaseUrl,
             model = state.model,
-            project = project,
             temperature = state.temperature,
             maxTokens = state.maxTokens
         )
@@ -38,11 +36,10 @@ object AiClientFactory {
         apiKey: String,
         apiBaseUrl: String,
         model: String,
-        project: Project,
         temperature: Double = 0.7,
         maxTokens: Int = 1024
     ): AiClient {
-        val httpClient = ProxyConfigUtil.buildHttpClient(project)
+        val httpClient = ProxyConfigUtil.buildHttpClient()
 
         return when (provider) {
             AiProvider.OPENAI -> OpenAiClient(

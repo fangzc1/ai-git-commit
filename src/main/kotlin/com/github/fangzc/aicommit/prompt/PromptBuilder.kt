@@ -10,7 +10,7 @@ import git4idea.repo.GitRepositoryManager
 object PromptBuilder {
 
     fun build(diff: String, project: Project): String {
-        val state = PluginSettings.getInstance(project).stateData
+        val state = PluginSettings.getInstance().stateData
         val template = if (state.useCustomPrompt && state.customPrompt.isNotBlank()) {
             state.customPrompt
         } else {

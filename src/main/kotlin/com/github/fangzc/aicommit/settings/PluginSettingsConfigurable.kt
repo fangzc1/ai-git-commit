@@ -4,7 +4,6 @@ import com.github.fangzc.aicommit.ai.AiClientFactory
 import com.github.fangzc.aicommit.ai.AiProvider
 import com.github.fangzc.aicommit.prompt.DefaultPrompts
 import com.intellij.openapi.options.Configurable
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPasswordField
@@ -21,11 +20,11 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
 /**
- * Settings 页面：Settings > Version Control > AI Commit Message
+ * Settings 页面：Settings > Tools > AI Commit Message（应用级，所有项目共享）
  */
-class PluginSettingsConfigurable(private val project: Project) : Configurable {
+class PluginSettingsConfigurable : Configurable {
 
-    private val settings = PluginSettings.getInstance(project)
+    private val settings = PluginSettings.getInstance()
 
     // UI 组件引用（每次 buildSettingsPanel 后重新赋值）
     private lateinit var providerCombo: Cell<com.intellij.openapi.ui.ComboBox<String>>
@@ -558,8 +557,7 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                     provider = selectedProvider,
                     apiKey = currentKey,
                     apiBaseUrl = currentUrl,
-                    model = currentModel,
-                    project = project
+                    model = currentModel
                 )
                 // 直接通过获取模型列表来验证连接是否正常
                 fetchedModels = client.fetchModels()

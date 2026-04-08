@@ -1,7 +1,6 @@
 package com.github.fangzc.aicommit.util
 
 import com.github.fangzc.aicommit.settings.PluginSettings
-import com.intellij.openapi.project.Project
 import com.intellij.util.net.IdeProxySelector
 import com.intellij.util.net.ProxyConfiguration
 import com.intellij.util.net.ProxyCredentialStore
@@ -21,8 +20,8 @@ object ProxyConfigUtil {
     /**
      * 根据插件配置构建带代理的 HttpClient
      */
-    fun buildHttpClient(project: Project): HttpClient {
-        val settings = PluginSettings.getInstance(project)
+    fun buildHttpClient(): HttpClient {
+        val settings = PluginSettings.getInstance()
         val state = settings.state
         val builder = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))

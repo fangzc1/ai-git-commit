@@ -5,11 +5,11 @@ import com.github.fangzc.aicommit.prompt.DefaultPrompts
 import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.credentialStore.generateServiceName
 import com.intellij.ide.passwordSafe.PasswordSafe
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.*
-import com.intellij.openapi.project.Project
 
 /**
- * 插件配置持久化服务（项目级别）
+ * 插件配置持久化服务（应用级别，所有项目共享）
  */
 @Service(Service.Level.APP)
 @State(
@@ -87,7 +87,7 @@ class PluginSettings : PersistentStateComponent<PluginSettings.State> {
     }
 
     companion object {
-        fun getInstance(project: Project): PluginSettings =
-            project.getService(PluginSettings::class.java)
+        fun getInstance(): PluginSettings =
+            ApplicationManager.getApplication().getService(PluginSettings::class.java)
     }
 }
