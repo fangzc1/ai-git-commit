@@ -6,13 +6,17 @@ import com.github.fangzc.aicommit.prompt.DefaultPrompts
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.*
+import java.awt.Color
 import java.awt.BorderLayout
+import java.awt.Dimension
 import javax.swing.JComponent
+import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
@@ -31,6 +35,12 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
     private lateinit var customPromptArea: Cell<JBTextArea>
     private lateinit var testButton: Cell<javax.swing.JButton>
     private lateinit var proxyPasswordField: Cell<JBPasswordField>
+    private lateinit var overviewProviderLabel: JLabel
+    private lateinit var overviewModelLabel: JLabel
+    private lateinit var overviewPromptLabel: JLabel
+    private lateinit var overviewProxyLabel: JLabel
+    private lateinit var connectionStatusLabel: JLabel
+    private lateinit var providerHintLabel: JLabel
 
     // 表单临时值（bind* 绑定字段会在用户输入时自动同步到此变量）
     private var selectedProvider = settings.stateData.provider
@@ -66,6 +76,13 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
     private var proxyAuthCheckRow: Row? = null
     private var proxyUsernameRow: Row? = null
     private var proxyPasswordRow: Row? = null
+    private var connectionStatus = ConnectionStatus.IDLE
+    private var lastConnectionError: String? = null
+    private var lastFetchedModelCount: Int? = null
+
+    private enum class ConnectionStatus {
+        IDLE, TESTING, SUCCESS, ERROR
+    }
 
     /** 根据 currentUiLocale 返回对应语言的 UI 字符串 */
     private fun l(en: String, zh: String): String = if (currentUiLocale == "zh") zh else en
@@ -85,27 +102,50 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
      */
     private fun buildSettingsPanel(): DialogPanel {
         return panel {
-            // ── 第一行：界面语言选择 ────────────────────────────────
-            row(l("Language:", "界面语言:")) {
-                comboBox(listOf("English", "中文"))
-                    .applyToComponent {
-                        selectedItem = if (currentUiLocale == "zh") "中文" else "English"
-                        addActionListener {
-                            val newLocale = if (selectedItem == "中文") "zh" else "en"
-                            if (newLocale != currentUiLocale) {
-                                currentUiLocale = newLocale
-                                rebuildPanel()
-                            }
-                        }
-                    }
+            group(l("Current Configuration", "当前配置摘要")) {
+                row(l("Provider:", "提供商:")) {
+                    overviewProviderLabel = label(selectedProvider.displayName).component
+                }
+                row(l("Model:", "模型:")) {
+                    overviewModelLabel = label(currentModelValue()).component
+                }
+                row(l("Prompt Strategy:", "提示词策略:")) {
+                    overviewPromptLabel = label(currentPromptSummary()).component
+                }
+                row(l("Proxy Mode:", "代理模式:")) {
+                    overviewProxyLabel = label(proxyModeSummary()).component
+                }
+                row(l("Connection:", "连接状态:")) {
+                    connectionStatusLabel = label(connectionStatusText()).component
+                }
             }
 
-            // ── AI Provider 配置 ────────────────────────────────────
-            group(l("AI Provider", "AI 提供商")) {
+            group(l("General", "通用")) {
+                row(l("Settings Language:", "设置页语言:")) {
+                    comboBox(listOf("English", "中文"))
+                        .applyToComponent {
+                            selectedItem = if (currentUiLocale == "zh") "中文" else "English"
+                            addActionListener {
+                                val newLocale = if (selectedItem == "中文") "zh" else "en"
+                                if (newLocale != currentUiLocale) {
+                                    currentUiLocale = newLocale
+                                    rebuildPanel()
+                                }
+                            }
+                        }
+                }.comment(l("Only affects the settings UI language.", "仅影响设置页面语言。"))
+
+                row(l("Commit Message Language:", "提交消息语言:")) {
+                    textField()
+                        .applyToComponent { text = this@PluginSettingsConfigurable.locale }
+                        .onChanged { locale = it.text }
+                }.comment(l("For example: en, zh, ja.", "例如：en、zh、ja。"))
+            }
+
+            group(l("Basic Access", "基础接入")) {
                 row(l("Provider:", "提供商:")) {
                     val providers = AiProvider.entries.map { it.displayName }.toTypedArray()
                     providerCombo = comboBox(providers.toList())
-                        .align(AlignX.FILL)
                         .applyToComponent {
                             selectedItem = selectedProvider.displayName
                             addActionListener {
@@ -115,16 +155,35 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                                     apiUrlField.component.text = newProvider.defaultApiUrl
                                     apiUrl = newProvider.defaultApiUrl
                                 }
+                                updateConnectionStatus(ConnectionStatus.IDLE)
                                 updateModelList(newProvider)
+                                updateProviderHint()
+                                updateOverviewSummary()
                             }
                         }
                 }
+
+                row {
+                    providerHintLabel = label(
+                        l(
+                            "${providerHintText()} Changing provider updates the recommended endpoint and model list.",
+                            "${providerHintText()} 切换提供商时会同步更新推荐的 API 地址和模型列表。"
+                        )
+                    ).component
+                    providerHintLabel.foreground = UIUtil.getContextHelpForeground()
+                }
+
                 row(l("API URL:", "API 地址:")) {
                     apiUrlField = textField()
                         .columns(COLUMNS_LARGE)
                         .applyToComponent { text = apiUrl }
-                        .onChanged { apiUrl = it.text }
-                }
+                        .onChanged {
+                            apiUrl = it.text
+                            updateConnectionStatus(ConnectionStatus.IDLE)
+                        }
+                }.comment(l("Use the provider default unless you are targeting a custom endpoint.", "除非使用自定义服务，否则建议保持默认地址。"))
+                syncComboWidths()
+
                 row(l("API Key:", "API 密钥:")) {
                     apiKeyField = cell(JBPasswordField())
                         .columns(COLUMNS_LARGE)
@@ -132,23 +191,27 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                     testButton = button(l("Test Connection", "测试连接")) {
                         testConnection()
                     }
-                }
+                }.comment(l("The API key is stored securely via PasswordSafe.", "API 密钥会通过 PasswordSafe 安全存储。"))
+
                 row(l("Model:", "模型:")) {
-                    val models = if (selectedProvider.defaultModels.isNotEmpty()) {
-                        selectedProvider.defaultModels
-                    } else {
+                    val models = selectedProvider.defaultModels.ifEmpty {
                         listOf(selectedModel.ifBlank { "gpt-4o-mini" })
                     }
                     modelCombo = comboBox(models)
                         .applyToComponent {
                             isEditable = true
                             selectedItem = selectedModel
+                            addActionListener { updateOverviewSummary() }
+                        }
+                    label(l("You can keep the recommended model or enter one manually.", "可以使用推荐模型，也可以手动输入自定义模型。"))
+                        .applyToComponent {
+                            foreground = UIUtil.getContextHelpForeground()
                         }
                 }
+                syncComboWidths()
             }
 
-            // ── 提示词模板 ──────────────────────────────────────────
-            group(l("Prompt Template", "提示词模板")) {
+            group(l("Prompt Strategy", "提示词策略")) {
                 buttonsGroup {
                     for (name in DefaultPrompts.TEMPLATES.keys) {
                         val description = when (name) {
@@ -163,9 +226,11 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                         row {
                             radioButton(name, name)
                                 .applyToComponent {
-                                    // 立即切换自定义输入区域的可见性
                                     addActionListener {
+                                        useCustomPrompt = false
+                                        promptTemplate = name
                                         customPromptRow?.visible(false)
+                                        updateOverviewSummary()
                                         wrapper?.revalidate()
                                         wrapper?.repaint()
                                     }
@@ -179,7 +244,9 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                         radioButton("Custom", "Custom")
                             .applyToComponent {
                                 addActionListener {
+                                    useCustomPrompt = true
                                     customPromptRow?.visible(true)
+                                    updateOverviewSummary()
                                     wrapper?.revalidate()
                                     wrapper?.repaint()
                                 }
@@ -221,20 +288,46 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                 promptRow.resizableRow()
             }
 
-            // ── 代理设置 ────────────────────────────────────────────
-            collapsibleGroup(l("Proxy Settings", "代理设置")) {
+            collapsibleGroup(l("Network & Proxy", "网络与代理")) {
                 buttonsGroup {
                     row {
                         radioButton(l("Use IDE Proxy", "使用 IDE 代理"), PluginSettings.ProxyMode.IDE)
-                            .applyToComponent { addActionListener { setProxyFieldsVisible(false) } }
+                            .applyToComponent {
+                                addActionListener {
+                                    proxyMode = PluginSettings.ProxyMode.IDE
+                                    setProxyFieldsVisible(false)
+                                    updateOverviewSummary()
+                                }
+                            }
+                        label(l("Use the IDE global proxy settings.", "跟随 IDE 全局代理设置。")).applyToComponent {
+                            foreground = UIUtil.getContextHelpForeground()
+                        }
                     }
                     row {
                         radioButton(l("Custom Proxy", "自定义代理"), PluginSettings.ProxyMode.CUSTOM)
-                            .applyToComponent { addActionListener { setProxyFieldsVisible(true) } }
+                            .applyToComponent {
+                                addActionListener {
+                                    proxyMode = PluginSettings.ProxyMode.CUSTOM
+                                    setProxyFieldsVisible(true)
+                                    updateOverviewSummary()
+                                }
+                            }
+                        label(l("Provide a plugin-specific proxy configuration.", "为插件单独配置代理。")).applyToComponent {
+                            foreground = UIUtil.getContextHelpForeground()
+                        }
                     }
                     row {
                         radioButton(l("No Proxy", "不使用代理"), PluginSettings.ProxyMode.NONE)
-                            .applyToComponent { addActionListener { setProxyFieldsVisible(false) } }
+                            .applyToComponent {
+                                addActionListener {
+                                    proxyMode = PluginSettings.ProxyMode.NONE
+                                    setProxyFieldsVisible(false)
+                                    updateOverviewSummary()
+                                }
+                            }
+                        label(l("Connect directly without any proxy.", "直接连接，不走代理。")).applyToComponent {
+                            foreground = UIUtil.getContextHelpForeground()
+                        }
                     }
                 }.bind(::proxyMode)
 
@@ -254,7 +347,10 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                         checkBox(l("Proxy Authentication", "代理身份验证"))
                             .applyToComponent {
                                 isSelected = proxyAuthEnabled
-                                addItemListener { proxyAuthEnabled = isSelected }
+                                addItemListener {
+                                    proxyAuthEnabled = isSelected
+                                    setProxyAuthFieldsVisible(proxyMode == PluginSettings.ProxyMode.CUSTOM && proxyAuthEnabled)
+                                }
                             }
                     }
                     indent {
@@ -271,34 +367,24 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                         }
                     }
                 }
-                // 根据当前代理模式设置初始可见性
                 setProxyFieldsVisible(proxyMode == PluginSettings.ProxyMode.CUSTOM)
             }
 
-            // ── 高级设置 ────────────────────────────────────────────
             collapsibleGroup(l("Advanced Settings", "高级设置")) {
                 row(l("Max Diff Length:", "最大差异长度:")) {
                     intTextField(100..100000)
                         .applyToComponent { text = maxDiffLength.toString() }
                         .onChanged { maxDiffLength = it.text.toIntOrNull()?.coerceIn(100..100000) ?: maxDiffLength }
-                        .comment(l("Maximum characters of diff to send to AI", "发送给 AI 的差异最大字符数"))
-                }
+                }.comment(l("Maximum characters of diff to send to AI.", "发送给 AI 的 diff 最大字符数。"))
                 row(l("Temperature:", "温度:")) {
                     textField()
                         .applyToComponent { text = temperature.toString() }
                         .onChanged { temperature = it.text.toDoubleOrNull() ?: temperature }
-                        .comment(l("0.0 - 2.0, lower = more deterministic", "0.0 - 2.0，越低结果越确定"))
-                }
+                }.comment(l("0.0 - 2.0. Lower values are more deterministic.", "范围 0.0 - 2.0，越低越稳定。"))
                 row(l("Max Tokens:", "最大 Token 数:")) {
                     intTextField(100..8192)
                         .applyToComponent { text = maxTokens.toString() }
                         .onChanged { maxTokens = it.text.toIntOrNull()?.coerceIn(100..8192) ?: maxTokens }
-                }
-                row(l("Commit Message Language:", "提交消息语言:")) {
-                    textField()
-                        .applyToComponent { text = this@PluginSettingsConfigurable.locale }
-                        .onChanged { locale = it.text }
-                        .comment(l("e.g., en, zh, ja", "例如：en, zh, ja"))
                 }
             }
         }.also { dialogPanel = it }
@@ -317,8 +403,15 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
 
     /** 根据是否为 CUSTOM 模式显示或隐藏代理详情字段 */
     private fun setProxyFieldsVisible(visible: Boolean) {
-        listOf(proxyHostRow, proxyPortRow, proxyAuthCheckRow, proxyUsernameRow, proxyPasswordRow)
-            .forEach { it?.visible(visible) }
+        listOf(proxyHostRow, proxyPortRow, proxyAuthCheckRow).forEach { it?.visible(visible) }
+        setProxyAuthFieldsVisible(visible && proxyAuthEnabled)
+        updateOverviewSummary()
+        wrapper?.revalidate()
+        wrapper?.repaint()
+    }
+
+    private fun setProxyAuthFieldsVisible(visible: Boolean) {
+        listOf(proxyUsernameRow, proxyPasswordRow).forEach { it?.visible(visible) }
         wrapper?.revalidate()
         wrapper?.repaint()
     }
@@ -394,6 +487,9 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
         maxTokens = settings.stateData.maxTokens
         locale = settings.stateData.locale
         currentUiLocale = settings.stateData.uiLocale
+        connectionStatus = ConnectionStatus.IDLE
+        lastConnectionError = null
+        lastFetchedModelCount = null
         // 重建面板以将重置的值同步回所有 UI 组件
         if (wrapper != null) rebuildPanel()
     }
@@ -406,6 +502,9 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
         if (models.isNotEmpty()) {
             combo.selectedItem = models.first()
         }
+        selectedModel = combo.selectedItem as? String ?: selectedModel
+        syncComboWidths()
+        updateOverviewSummary()
     }
 
     private fun testConnection() {
@@ -414,17 +513,16 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
         val currentModel = modelCombo.component.selectedItem as? String ?: ""
 
         if (currentKey.isBlank()) {
-            com.intellij.openapi.ui.Messages.showErrorDialog(
-                project,
-                l("Please enter an API Key first.", "请先输入 API Key。"),
-                l("Test Connection", "测试连接")
+            updateConnectionStatus(
+                ConnectionStatus.ERROR,
+                l("Please enter an API key first.", "请先输入 API Key。")
             )
             return
         }
 
-        // 禁用按钮，显示测试中状态
         testButton.component.isEnabled = false
         testButton.component.text = l("Testing...", "测试中...")
+        updateConnectionStatus(ConnectionStatus.TESTING)
 
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             var errorMsg: String? = null
@@ -445,38 +543,39 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
             }
 
             val successFinal = errorMsg == null
-            val errorMsgFinal = errorMsg
+            val errorMsgFinal = errorMsg ?: l(
+                "Please check your API key and settings.",
+                "请检查 API Key 和相关配置。"
+            )
             val fetchedModelsFinal = fetchedModels
 
             SwingUtilities.invokeLater {
-                // 恢复按钮状态
                 testButton.component.isEnabled = true
                 testButton.component.text = l("Test Connection", "测试连接")
 
                 if (successFinal) {
-                    // 有模型列表则填充下拉框
                     if (fetchedModelsFinal.isNotEmpty()) {
                         populateModelCombo(fetchedModelsFinal, currentModel)
                     }
-                    com.intellij.openapi.ui.Messages.showInfoMessage(
-                        project,
-                        if (fetchedModelsFinal.isNotEmpty())
+                    updateConnectionStatus(
+                        ConnectionStatus.SUCCESS,
+                        if (fetchedModelsFinal.isNotEmpty()) {
                             l(
-                                "Connection successful!\nFetched ${fetchedModelsFinal.size} models.",
-                                "连接成功！\n已获取 ${fetchedModelsFinal.size} 个模型。"
+                                "Connection successful. Fetched ${fetchedModelsFinal.size} models.",
+                                "连接成功，已获取 ${fetchedModelsFinal.size} 个模型。"
                             )
-                        else
-                            l("Connection successful!", "连接成功！"),
-                        l("Test Connection", "测试连接")
+                        } else {
+                            l("Connection successful.", "连接成功。")
+                        },
+                        fetchedModelsFinal.size
                     )
                 } else {
-                    com.intellij.openapi.ui.Messages.showErrorDialog(
-                        project,
+                    updateConnectionStatus(
+                        ConnectionStatus.ERROR,
                         l(
-                            "Connection failed: ${errorMsgFinal ?: "Please check your API key and settings."}",
-                            "连接失败：${errorMsgFinal ?: "请检查您的 API Key 和配置。"}"
-                        ),
-                        l("Test Connection", "测试连接")
+                            "Connection failed: $errorMsgFinal",
+                            "连接失败：$errorMsgFinal"
+                        )
                     )
                 }
             }
@@ -492,6 +591,127 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
             combo.selectedItem = currentModel
         } else if (models.isNotEmpty()) {
             combo.selectedIndex = 0
+        }
+        selectedModel = combo.selectedItem as? String ?: currentModel
+        updateOverviewSummary()
+    }
+
+    private fun updateOverviewSummary() {
+        if (::overviewProviderLabel.isInitialized) {
+            overviewProviderLabel.text = selectedProvider.displayName
+        }
+        if (::overviewModelLabel.isInitialized) {
+            overviewModelLabel.text = currentModelValue()
+        }
+        if (::overviewPromptLabel.isInitialized) {
+            overviewPromptLabel.text = currentPromptSummary()
+        }
+        if (::overviewProxyLabel.isInitialized) {
+            overviewProxyLabel.text = proxyModeSummary()
+        }
+        if (::connectionStatusLabel.isInitialized) {
+            connectionStatusLabel.text = connectionStatusText()
+            connectionStatusLabel.foreground = when (connectionStatus) {
+                ConnectionStatus.SUCCESS -> JBColor(Color(0x2E7D32), Color(0x6FBF73))
+                ConnectionStatus.ERROR -> UIUtil.getErrorForeground()
+                ConnectionStatus.TESTING -> UIUtil.getLabelForeground()
+                ConnectionStatus.IDLE -> UIUtil.getContextHelpForeground()
+            }
+        }
+    }
+
+    private fun updateProviderHint() {
+        if (::providerHintLabel.isInitialized) {
+            providerHintLabel.text = providerHintText()
+        }
+    }
+
+    private fun updateConnectionStatus(
+        status: ConnectionStatus,
+        message: String? = null,
+        fetchedModelCount: Int? = null
+    ) {
+        connectionStatus = status
+        lastConnectionError = if (status == ConnectionStatus.ERROR) message else null
+        lastFetchedModelCount = if (status == ConnectionStatus.SUCCESS) fetchedModelCount else lastFetchedModelCount
+
+        if (status == ConnectionStatus.IDLE) {
+            lastConnectionError = null
+        }
+
+        if (status == ConnectionStatus.SUCCESS && fetchedModelCount != null) {
+            lastFetchedModelCount = fetchedModelCount
+        }
+        updateOverviewSummary()
+    }
+
+    private fun providerHintText(): String = when (selectedProvider) {
+        AiProvider.OPENAI -> l(
+            "Recommended for the default setup. The endpoint and default models are prefilled.",
+            "默认推荐配置，API 地址和模型建议会自动填充。"
+        )
+        AiProvider.ANTHROPIC -> l(
+            "Useful when you prefer Claude models for longer change summaries.",
+            "适合偏好 Claude 模型、需要更强长文本总结能力的场景。"
+        )
+        AiProvider.GEMINI -> l(
+            "A good option when you want a fast model with a separate endpoint.",
+            "适合希望使用独立端点和较快模型的场景。"
+        )
+        AiProvider.CUSTOM -> l(
+            "For OpenAI-compatible services. You should provide your own endpoint and model.",
+            "用于 OpenAI 兼容服务，需要自行填写 API 地址和模型。"
+        )
+    }
+
+    private fun connectionStatusText(): String = when (connectionStatus) {
+        ConnectionStatus.IDLE -> l("Not tested in this session.", "当前会话尚未测试。")
+        ConnectionStatus.TESTING -> l("Testing connection...", "正在测试连接...")
+        ConnectionStatus.SUCCESS -> when {
+            lastFetchedModelCount != null && lastFetchedModelCount!! > 0 ->
+                l(
+                    "Connection verified. $lastFetchedModelCount models fetched.",
+                    "连接已验证，获取到 $lastFetchedModelCount 个模型。"
+                )
+            else -> l("Connection verified.", "连接已验证。")
+        }
+        ConnectionStatus.ERROR -> lastConnectionError
+            ?: l("Connection test failed.", "连接测试失败。")
+    }
+
+    private fun currentModelValue(): String {
+        if (::modelCombo.isInitialized) {
+            return modelCombo.component.selectedItem as? String ?: selectedModel.ifBlank { l("Not set", "未设置") }
+        }
+        return selectedModel.ifBlank { l("Not set", "未设置") }
+    }
+
+    private fun currentPromptSummary(): String =
+        if (useCustomPrompt) l("Custom Prompt", "自定义提示词") else promptTemplate
+
+    private fun proxyModeSummary(): String = when (proxyMode) {
+        PluginSettings.ProxyMode.IDE -> l("IDE Proxy", "IDE 代理")
+        PluginSettings.ProxyMode.CUSTOM -> l("Custom Proxy", "自定义代理")
+        PluginSettings.ProxyMode.NONE -> l("No Proxy", "不使用代理")
+    }
+
+    private fun syncComboWidths() {
+        if (!::apiUrlField.isInitialized) return
+
+        val targetWidth = apiUrlField.component.preferredSize.width
+
+        if (::providerCombo.isInitialized) {
+            val size = Dimension(targetWidth, providerCombo.component.preferredSize.height)
+            providerCombo.component.preferredSize = size
+            providerCombo.component.minimumSize = size
+            providerCombo.component.maximumSize = size
+        }
+
+        if (::modelCombo.isInitialized) {
+            val size = Dimension(targetWidth, modelCombo.component.preferredSize.height)
+            modelCombo.component.preferredSize = size
+            modelCombo.component.minimumSize = size
+            modelCombo.component.maximumSize = size
         }
     }
 }
