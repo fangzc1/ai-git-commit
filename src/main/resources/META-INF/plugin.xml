@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.github.fangzc.ai-commit-message</id>
     <name>AI Commit Helper</name>
-    <vendor>fangzc</vendor>
+    <vendor>Fangzc</vendor>
 
     <description><![CDATA[
 <h3>AI Commit Helper</h3>

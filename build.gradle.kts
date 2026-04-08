@@ -58,7 +58,7 @@ intellijPlatform {
             </ul>
         """.trimIndent()
         vendor {
-            name = "fangzc"
+            name = "Fangzc"
         }
         ideaVersion {
             sinceBuild = "243"
