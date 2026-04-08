@@ -60,6 +60,13 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
     // 自定义提示词输入行，用于控制显/隐
     private var customPromptRow: Row? = null
 
+    // 代理详情行引用，用于在非 CUSTOM 模式下隐藏这些字段，防止用户误清除
+    private var proxyHostRow: Row? = null
+    private var proxyPortRow: Row? = null
+    private var proxyAuthCheckRow: Row? = null
+    private var proxyUsernameRow: Row? = null
+    private var proxyPasswordRow: Row? = null
+
     /** 根据 currentUiLocale 返回对应语言的 UI 字符串 */
     private fun l(en: String, zh: String): String = if (currentUiLocale == "zh") zh else en
 
@@ -217,24 +224,33 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
             // ── 代理设置 ────────────────────────────────────────────
             collapsibleGroup(l("Proxy Settings", "代理设置")) {
                 buttonsGroup {
-                    row { radioButton(l("Use IDE Proxy", "使用 IDE 代理"), PluginSettings.ProxyMode.IDE) }
-                    row { radioButton(l("Custom Proxy", "自定义代理"), PluginSettings.ProxyMode.CUSTOM) }
-                    row { radioButton(l("No Proxy", "不使用代理"), PluginSettings.ProxyMode.NONE) }
+                    row {
+                        radioButton(l("Use IDE Proxy", "使用 IDE 代理"), PluginSettings.ProxyMode.IDE)
+                            .applyToComponent { addActionListener { setProxyFieldsVisible(false) } }
+                    }
+                    row {
+                        radioButton(l("Custom Proxy", "自定义代理"), PluginSettings.ProxyMode.CUSTOM)
+                            .applyToComponent { addActionListener { setProxyFieldsVisible(true) } }
+                    }
+                    row {
+                        radioButton(l("No Proxy", "不使用代理"), PluginSettings.ProxyMode.NONE)
+                            .applyToComponent { addActionListener { setProxyFieldsVisible(false) } }
+                    }
                 }.bind(::proxyMode)
 
                 indent {
-                    row(l("Host:", "主机:")) {
+                    proxyHostRow = row(l("Host:", "主机:")) {
                         textField()
                             .columns(COLUMNS_MEDIUM)
                             .applyToComponent { text = proxyHost }
                             .onChanged { proxyHost = it.text }
                     }
-                    row(l("Port:", "端口:")) {
+                    proxyPortRow = row(l("Port:", "端口:")) {
                         intTextField(1..65535)
                             .applyToComponent { text = proxyPort.toString() }
                             .onChanged { proxyPort = it.text.toIntOrNull()?.coerceIn(1..65535) ?: proxyPort }
                     }
-                    row {
+                    proxyAuthCheckRow = row {
                         checkBox(l("Proxy Authentication", "代理身份验证"))
                             .applyToComponent {
                                 isSelected = proxyAuthEnabled
@@ -242,19 +258,21 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
                             }
                     }
                     indent {
-                        row(l("Username:", "用户名:")) {
+                        proxyUsernameRow = row(l("Username:", "用户名:")) {
                             textField()
                                 .columns(COLUMNS_MEDIUM)
                                 .applyToComponent { text = proxyUser }
                                 .onChanged { proxyUser = it.text }
                         }
-                        row(l("Password:", "密码:")) {
+                        proxyPasswordRow = row(l("Password:", "密码:")) {
                             proxyPasswordField = cell(JBPasswordField())
                                 .columns(COLUMNS_MEDIUM)
                                 .applyToComponent { text = settings.proxyPassword }
                         }
                     }
                 }
+                // 根据当前代理模式设置初始可见性
+                setProxyFieldsVisible(proxyMode == PluginSettings.ProxyMode.CUSTOM)
             }
 
             // ── 高级设置 ────────────────────────────────────────────
@@ -295,6 +313,14 @@ class PluginSettingsConfigurable(private val project: Project) : Configurable {
         w.add(buildSettingsPanel(), BorderLayout.CENTER)
         w.revalidate()
         w.repaint()
+    }
+
+    /** 根据是否为 CUSTOM 模式显示或隐藏代理详情字段 */
+    private fun setProxyFieldsVisible(visible: Boolean) {
+        listOf(proxyHostRow, proxyPortRow, proxyAuthCheckRow, proxyUsernameRow, proxyPasswordRow)
+            .forEach { it?.visible(visible) }
+        wrapper?.revalidate()
+        wrapper?.repaint()
     }
 
     override fun isModified(): Boolean {
