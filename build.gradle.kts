@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.fangzc"
-version = "1.0.3"
+version = "1.0.4"
 
 kotlin {
     jvmToolchain(21)
@@ -32,7 +32,7 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         id = "com.github.fangzc.ai-commit-message"
-        name = "Commit Message(AI)"
+        name = "AI Commit Helper"
         version = project.version.toString()
         description = """
             <p>Generate git commit messages using AI (OpenAI, Anthropic, Gemini or custom OpenAI-compatible endpoints).</p>

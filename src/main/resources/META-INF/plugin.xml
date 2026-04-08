@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>com.github.fangzc.ai-commit-message</id>
-    <name>Commit Message(AI)</name>
+    <name>AI Commit Helper</name>
     <vendor>fangzc</vendor>
 
     <depends>com.intellij.modules.platform</depends>
@@ -11,12 +11,12 @@
         <!-- 应用级服务（所有项目共享配置） -->
         <applicationService serviceImplementation="com.github.fangzc.aicommit.settings.PluginSettings"/>
 
-        <!-- Settings 页面（应用级，位于 Settings → Tools → Commit Message(AI)） -->
+        <!-- Settings 页面（应用级，位于 Settings → Tools → AI Commit Helper） -->
         <applicationConfigurable
                 parentId="tools"
                 instance="com.github.fangzc.aicommit.settings.PluginSettingsConfigurable"
                 id="com.github.fangzc.aicommit.settings"
-                displayName="Commit Message(AI)"/>
+                displayName="AI Commit Helper"/>
 
         <!-- 通知组 -->
         <notificationGroup id="AiCommit.Notification"
