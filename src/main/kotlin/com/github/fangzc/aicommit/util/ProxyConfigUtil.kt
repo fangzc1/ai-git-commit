@@ -1,10 +1,11 @@
-@file:Suppress("DEPRECATION")
-
 package com.github.fangzc.aicommit.util
 
 import com.github.fangzc.aicommit.settings.PluginSettings
 import com.intellij.openapi.project.Project
-import com.intellij.util.net.HttpConfigurable
+import com.intellij.util.net.IdeProxySelector
+import com.intellij.util.net.ProxyConfiguration
+import com.intellij.util.net.ProxyCredentialStore
+import com.intellij.util.net.ProxySettings
 import java.net.Authenticator
 import java.net.InetSocketAddress
 import java.net.PasswordAuthentication
@@ -39,18 +40,23 @@ object ProxyConfigUtil {
 
     /**
      * 使用 IDE 全局代理配置
+     * 使用 IdeProxySelector + ProxySettings + ProxyCredentialStore
+     * 替代已废弃的 HttpConfigurable 字段和方法
      */
-    @Suppress("DEPRECATION")
     private fun configureIdeProxy(builder: HttpClient.Builder) {
-        val httpConfigurable = HttpConfigurable.getInstance()
-        if (httpConfigurable.USE_HTTP_PROXY && httpConfigurable.PROXY_HOST.isNotBlank()) {
-            val address = InetSocketAddress(httpConfigurable.PROXY_HOST, httpConfigurable.PROXY_PORT)
-            builder.proxy(ProxySelector.of(address))
+        // 使用 IdeProxySelector 自动读取 IDE 代理设置，支持静态、自动检测和 PAC 代理
+        builder.proxy(IdeProxySelector { ProxySettings.getInstance().getProxyConfiguration() })
 
-            if (httpConfigurable.PROXY_AUTHENTICATION) {
-                val login = httpConfigurable.proxyLogin ?: ""
-                val password = httpConfigurable.plainProxyPassword ?: ""
-                builder.authenticator(createAuthenticator(login, password))
+        // 静态代理时，从 ProxyCredentialStore 获取认证凭据
+        val config = ProxySettings.getInstance().getProxyConfiguration()
+        if (config is ProxyConfiguration.StaticProxyConfiguration) {
+            val credentials = ProxyCredentialStore.getInstance().getCredentials(config.host, config.port)
+            if (credentials != null) {
+                val login = credentials.userName ?: ""
+                val password = credentials.getPasswordAsString() ?: ""
+                if (login.isNotBlank()) {
+                    builder.authenticator(createAuthenticator(login, password))
+                }
             }
         }
     }
