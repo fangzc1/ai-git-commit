@@ -845,13 +845,18 @@ class PluginSettingsConfigurable : Configurable {
             override fun popupMenuCanceled(e: PopupMenuEvent) {}
             override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent) {
                 if (isFiltering) return
-                val currentText = textComponent.text
+                // 先保存当前 selectedItem（用户点击后已更新为目标模型）
+                // 必须在 removeAllItems() 之前保存，否则 removeAllItems() 会将 selectedItem 置为 null
+                val selectedValue = selectedItem as? String
                 isFiltering = true
                 try {
                     removeAllItems()
                     allModels.forEach { addItem(it) }
-                    textComponent.text = currentText
-                    textComponent.caretPosition = currentText.length
+                    // 明确恢复 selectedItem，防止 removeAllItems() 导致选中项丢失
+                    val valueToRestore = selectedValue ?: ""
+                    selectedItem = valueToRestore
+                    textComponent.text = valueToRestore
+                    textComponent.caretPosition = valueToRestore.length
                 } finally {
                     isFiltering = false
                 }
