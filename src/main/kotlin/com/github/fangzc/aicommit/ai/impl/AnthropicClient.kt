@@ -10,7 +10,7 @@ import java.net.http.HttpClient
  * 认证：x-api-key header
  * SSE 事件类型：content_block_delta -> delta.text
  */
-class AnthropicClient(
+open class AnthropicClient(
     apiKey: String,
     baseUrl: String,
     model: String,

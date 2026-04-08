@@ -1,9 +1,11 @@
 package com.github.fangzc.aicommit.ai
 
 import com.github.fangzc.aicommit.ai.impl.AnthropicClient
+import com.github.fangzc.aicommit.ai.impl.CustomAnthropicClient
 import com.github.fangzc.aicommit.ai.impl.CustomClient
 import com.github.fangzc.aicommit.ai.impl.GeminiClient
 import com.github.fangzc.aicommit.ai.impl.OpenAiClient
+import com.github.fangzc.aicommit.ai.impl.OpenRouterClient
 import com.github.fangzc.aicommit.settings.PluginSettings
 import com.github.fangzc.aicommit.util.ProxyConfigUtil
 
@@ -66,7 +68,23 @@ object AiClientFactory {
                 temperature = temperature,
                 maxTokens = maxTokens
             )
+            AiProvider.OPENROUTER -> OpenRouterClient(
+                apiKey = apiKey,
+                baseUrl = apiBaseUrl.ifBlank { AiProvider.OPENROUTER.defaultApiUrl },
+                model = model,
+                httpClient = httpClient,
+                temperature = temperature,
+                maxTokens = maxTokens
+            )
             AiProvider.CUSTOM -> CustomClient(
+                apiKey = apiKey,
+                baseUrl = apiBaseUrl,
+                model = model,
+                httpClient = httpClient,
+                temperature = temperature,
+                maxTokens = maxTokens
+            )
+            AiProvider.CUSTOM_ANTHROPIC -> CustomAnthropicClient(
                 apiKey = apiKey,
                 baseUrl = apiBaseUrl,
                 model = model,

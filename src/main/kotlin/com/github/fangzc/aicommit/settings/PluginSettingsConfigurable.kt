@@ -681,9 +681,17 @@ class PluginSettingsConfigurable : Configurable {
             "A good option when you want a fast model with a separate endpoint.",
             "适合希望使用独立端点和较快模型的场景。"
         )
+        AiProvider.OPENROUTER -> l(
+            "A model aggregator. The endpoint is prefilled. Fetch models via Test Connection.",
+            "模型聚合平台，API 地址已预填，点击「测试连接」可自动获取模型列表。"
+        )
         AiProvider.CUSTOM -> l(
             "For OpenAI-compatible services. You should provide your own endpoint and model.",
             "用于 OpenAI 兼容服务，需要自行填写 API 地址和模型。"
+        )
+        AiProvider.CUSTOM_ANTHROPIC -> l(
+            "For Anthropic-compatible services (e.g. self-hosted Claude proxy). Provide your own endpoint and model.",
+            "适用于 Anthropic 协议兼容服务（如自建 Claude 代理），需填写自定义 API 地址和模型。"
         )
     }
 

@@ -23,8 +23,18 @@ enum class AiProvider(
         defaultApiUrl = "https://generativelanguage.googleapis.com",
         defaultModels = listOf("gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro")
     ),
+    OPENROUTER(
+        displayName = "OpenRouter",
+        defaultApiUrl = "https://openrouter.ai/api",
+        defaultModels = emptyList()
+    ),
     CUSTOM(
         displayName = "Custom (OpenAI Compatible)",
+        defaultApiUrl = "",
+        defaultModels = emptyList()
+    ),
+    CUSTOM_ANTHROPIC(
+        displayName = "Custom (Anthropic Compatible)",
         defaultApiUrl = "",
         defaultModels = emptyList()
     );
