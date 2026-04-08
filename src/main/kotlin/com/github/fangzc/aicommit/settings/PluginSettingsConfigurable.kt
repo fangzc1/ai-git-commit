@@ -74,6 +74,13 @@ class PluginSettingsConfigurable : Configurable {
         mutableMapOf(settings.stateData.provider to settings.stateData.apiBaseUrl)
     private val providerModelCache: MutableMap<AiProvider, String> =
         mutableMapOf(settings.stateData.provider to settings.stateData.model)
+    // 各 Provider 的 API Key 缓存，切换时保存/恢复，用于判断 key 是否变更
+    private val providerApiKeyCache: MutableMap<AiProvider, String> =
+        mutableMapOf(settings.stateData.provider to settings.apiKey)
+
+    // 测试连接成功后的结果缓存：记录测试时使用的 apiUrl、apiKey 与获取到的模型列表
+    private data class ProviderTestCache(val apiUrl: String, val apiKey: String, val models: List<String>)
+    private val providerTestResultCache: MutableMap<AiProvider, ProviderTestCache> = mutableMapOf()
 
     // 外层包装面板，语言切换时重建内层设置面板
     private var wrapper: JPanel? = null
@@ -100,6 +107,10 @@ class PluginSettingsConfigurable : Configurable {
 
     /** 根据 currentUiLocale 返回对应语言的 UI 字符串 */
     private fun l(en: String, zh: String): String = if (currentUiLocale == "zh") zh else en
+
+    /** 是否为自定义（用户需自填 API 地址）的供应商 */
+    private fun isCustomProvider(provider: AiProvider): Boolean =
+        provider == AiProvider.CUSTOM || provider == AiProvider.CUSTOM_ANTHROPIC
 
     override fun getDisplayName(): String = "AI Commit Message"
 
@@ -166,21 +177,43 @@ class PluginSettingsConfigurable : Configurable {
                                 val newProvider = AiProvider.fromDisplayName(selectedItem as String)
                                 if (newProvider == selectedProvider) return@addActionListener
 
-                                // 将当前 Provider 的 URL 和模型保存到缓存
+                                // 将当前 Provider 的 URL、API Key 和模型保存到缓存
                                 providerApiUrlCache[selectedProvider] = apiUrlField.component.text
+                                providerApiKeyCache[selectedProvider] = String(apiKeyField.component.password)
                                 providerModelCache[selectedProvider] =
                                     modelCombo.component.selectedItem as? String ?: ""
 
                                 selectedProvider = newProvider
 
-                                // 优先从缓存恢复，缓存没有则使用 Provider 默认值
+                                // 优先从缓存恢复 URL，缓存没有则使用 Provider 默认值
                                 val restoredUrl = providerApiUrlCache[newProvider] ?: newProvider.defaultApiUrl
                                 apiUrlField.component.text = restoredUrl
                                 apiUrl = restoredUrl
+                                // 非自定义供应商不允许修改 API 地址
+                                apiUrlField.component.isEditable = isCustomProvider(newProvider)
 
+                                // 恢复 API Key
+                                val restoredKey = providerApiKeyCache[newProvider] ?: ""
+                                apiKeyField.component.text = restoredKey
+
+                                // 检查测试结果缓存：若 URL 和 Key 与上次测试一致则直接恢复模型列表
+                                val testCache = providerTestResultCache[newProvider]
                                 val restoredModel = providerModelCache[newProvider]
-                                updateConnectionStatus(ConnectionStatus.IDLE)
-                                updateModelList(newProvider, restoredModel)
+                                if (testCache != null
+                                    && testCache.apiUrl == restoredUrl
+                                    && testCache.apiKey == restoredKey
+                                ) {
+                                    populateModelCombo(testCache.models, restoredModel ?: testCache.models.firstOrNull() ?: "")
+                                    updateConnectionStatus(
+                                        ConnectionStatus.SUCCESS,
+                                        null,
+                                        testCache.models.size
+                                    )
+                                } else {
+                                    updateConnectionStatus(ConnectionStatus.IDLE)
+                                    updateModelList(newProvider, restoredModel)
+                                }
+
                                 updateProviderHint()
                                 updateOverviewSummary()
                             }
@@ -200,7 +233,11 @@ class PluginSettingsConfigurable : Configurable {
                 row(l("API URL:", "API 地址:")) {
                     apiUrlField = textField()
                         .columns(COLUMNS_LARGE)
-                        .applyToComponent { text = apiUrl }
+                        .applyToComponent {
+                            text = apiUrl
+                            // 非自定义供应商的 API 地址不允许修改
+                            isEditable = isCustomProvider(selectedProvider)
+                        }
                         .onChanged {
                             apiUrl = it.text
                             updateConnectionStatus(ConnectionStatus.IDLE)
@@ -524,6 +561,9 @@ class PluginSettingsConfigurable : Configurable {
         providerApiUrlCache[settings.stateData.provider] = settings.stateData.apiBaseUrl
         providerModelCache.clear()
         providerModelCache[settings.stateData.provider] = settings.stateData.model
+        providerApiKeyCache.clear()
+        providerApiKeyCache[settings.stateData.provider] = settings.apiKey
+        providerTestResultCache.clear()
         // 重建面板以将重置的值同步回所有 UI 组件
         if (wrapper != null) rebuildPanel()
     }
@@ -599,6 +639,9 @@ class PluginSettingsConfigurable : Configurable {
                 if (successFinal) {
                     if (fetchedModelsFinal.isNotEmpty()) {
                         populateModelCombo(fetchedModelsFinal, currentModel)
+                        // 缓存本次测试结果，供切换 Provider 后回来时免重测
+                        providerTestResultCache[selectedProvider] =
+                            ProviderTestCache(currentUrl, currentKey, fetchedModelsFinal)
                     }
                     updateConnectionStatus(
                         ConnectionStatus.SUCCESS,
