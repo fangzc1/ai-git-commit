@@ -221,16 +221,6 @@ class PluginSettingsConfigurable : Configurable {
                         }
                 }
 
-                row {
-                    providerHintLabel = label(
-                        l(
-                            "${providerHintText()} Changing provider updates the recommended endpoint and model list.",
-                            "${providerHintText()} 切换提供商时会同步更新推荐的 API 地址和模型列表。"
-                        )
-                    ).component
-                    providerHintLabel.foreground = UIUtil.getContextHelpForeground()
-                }
-
                 row(l("API URL:", "API 地址:")) {
                     apiUrlField = textField()
                         .columns(COLUMNS_LARGE)
@@ -243,7 +233,7 @@ class PluginSettingsConfigurable : Configurable {
                             apiUrl = it.text
                             updateConnectionStatus(ConnectionStatus.IDLE)
                         }
-                }.comment(l("Use the provider default unless you are targeting a custom endpoint.", "除非使用自定义服务，否则建议保持默认地址。"))
+                }
                 syncComboWidths()
 
                 row(l("API Key:", "API 密钥:")) {
@@ -253,7 +243,7 @@ class PluginSettingsConfigurable : Configurable {
                     testButton = button(l("Test Connection", "测试连接")) {
                         testConnection()
                     }
-                }.comment(l("The API key is stored securely via PasswordSafe.", "API 密钥会通过 PasswordSafe 安全存储。"))
+                }
 
                 row(l("Model:", "模型:")) {
                     val models = selectedProvider.defaultModels.ifEmpty {
@@ -269,10 +259,6 @@ class PluginSettingsConfigurable : Configurable {
                                 updateOverviewSummary()
                             }
                             attachModelSearchFilter()
-                        }
-                    label(l("You can keep the recommended model or enter one manually.", "可以使用推荐模型，也可以手动输入自定义模型。"))
-                        .applyToComponent {
-                            foreground = UIUtil.getContextHelpForeground()
                         }
                 }
                 syncComboWidths()
@@ -372,9 +358,6 @@ class PluginSettingsConfigurable : Configurable {
                                     updateOverviewSummary()
                                 }
                             }
-                        label(l("Use the IDE global proxy settings.", "跟随 IDE 全局代理设置。")).applyToComponent {
-                            foreground = UIUtil.getContextHelpForeground()
-                        }
                     }
                     row {
                         radioButton(l("Custom Proxy", "自定义代理"), PluginSettings.ProxyMode.CUSTOM)
@@ -385,9 +368,6 @@ class PluginSettingsConfigurable : Configurable {
                                     updateOverviewSummary()
                                 }
                             }
-                        label(l("Provide a plugin-specific proxy configuration.", "为插件单独配置代理。")).applyToComponent {
-                            foreground = UIUtil.getContextHelpForeground()
-                        }
                     }
                     row {
                         radioButton(l("No Proxy", "不使用代理"), PluginSettings.ProxyMode.NONE)
@@ -398,9 +378,6 @@ class PluginSettingsConfigurable : Configurable {
                                     updateOverviewSummary()
                                 }
                             }
-                        label(l("Connect directly without any proxy.", "直接连接，不走代理。")).applyToComponent {
-                            foreground = UIUtil.getContextHelpForeground()
-                        }
                     }
                 }.bind(::proxyMode)
 
