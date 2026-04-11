@@ -27,6 +27,8 @@
   <li>代理支持（IDE 代理 / 自定义代理 / 无代理）</li>
   <li>可配置 Commit Message 输出语言</li>
 </ul>
+
+<p>🔗 <a href="https://github.com/fangzc1/ai-git-commit">GitHub</a> | <a href="https://github.com/fangzc1/ai-git-commit/issues">Feedback / 问题反馈</a></p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
